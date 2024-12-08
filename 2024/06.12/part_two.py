@@ -1,72 +1,81 @@
-def simulate_guard_movement(grid, start_pos, start_dir):
-    """Simulates the guard's movement and returns the set of visited positions."""
-    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # Up, Right, Down, Left
-    pos = start_pos
-    dir_idx = start_dir
-    visited = set([pos])
+def get_next_pos(pos, dir):
+    """Calculate next position based on direction."""
+    DIRS = [(0, -1), (1, 0), (0, 1), (-1, 0)]  # up, right, down, left
+    return (pos[0] + DIRS[dir][0], pos[1] + DIRS[dir][1])
 
-    while True:
-        next_pos = (pos[0] + directions[dir_idx][0], pos[1] + directions[dir_idx][1])
-        if grid[next_pos[0]][next_pos[1]] == '#':
-            dir_idx = (dir_idx + 1) % 4
-            # Print the invalid coordinates for debugging
-            print(f"Invalid position accessed: {next_pos}")
-        else:
-            pos = next_pos
-            visited.add(pos)
-            if pos not in grid:
-                break
+def is_valid_pos(pos, grid):
+    """Check if position is within grid bounds."""
+    return 0 <= pos[1] < len(grid) and 0 <= pos[0] < len(grid[0])
 
-    return visited
-
-def find_loop_positions(grid, start_pos, start_dir):
-    """Finds positions for a new obstruction to create a loop."""
-    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    pos = start_pos
-    dir_idx = start_dir
-    loop_positions = set()
-
-    def check_loop(pos, dir_idx):
-        next_pos = (pos[0] + directions[dir_idx][0], pos[1] + directions[dir_idx][1])
-        if grid[next_pos[0]][next_pos[1]] == '#':
+def simulate_path(grid, x, y, dir, blocked_pos=None):
+    """Simulates the guard's path and returns if it creates a loop."""
+    seen_states = set()
+    current_pos = (x, y)
+    steps = 0
+    max_steps = len(grid) * len(grid[0]) * 4  # Maximum possible states
+    
+    while steps < max_steps:
+        # Exit if we're out of bounds
+        if not is_valid_pos(current_pos, grid):
             return False
-        if next_pos in loop_positions:
+            
+        # Check for loop
+        state = (current_pos[0], current_pos[1], dir)
+        if state in seen_states:
             return True
-        loop_positions.add(next_pos)
-        return check_loop(next_pos, dir_idx)
-
-    while True:
-        next_pos = (pos[0] + directions[dir_idx][0], pos[1] + directions[dir_idx][1])
-        if grid[next_pos[0]][next_pos[1]] == '#':
-            dir_idx = (dir_idx + 1) % 4
+        seen_states.add(state)
+        
+        # Calculate next position
+        next_pos = get_next_pos(current_pos, dir)
+        
+        # Check if we hit an obstacle or go out of bounds
+        hits_obstacle = (
+            not is_valid_pos(next_pos, grid) or
+            (is_valid_pos(next_pos, grid) and grid[next_pos[1]][next_pos[0]] == '#') or
+            next_pos == blocked_pos
+        )
+        
+        if hits_obstacle:
+            # Turn right
+            dir = (dir + 1) % 4
         else:
-            pos = next_pos
-            if check_loop(pos, dir_idx):
-                loop_positions.remove(pos)  # Remove the current position as it's not a valid loop start
-            if pos not in grid:
-                break
+            # Move forward
+            current_pos = next_pos
+            
+        steps += 1
+    
+    return True  # If we hit max steps, probably in a loop
 
-    return loop_positions
+def find_start(grid):
+    """Find starting position and direction of guard."""
+    for y in range(len(grid)):
+        for x in range(len(grid[0])):
+            if grid[y][x] == '^':
+                return (x, y)
+    return None
 
-# Read the input from the file
-with open("input.txt", "r") as f:
-    grid = {}
-    y = 0
-    for line in f:
-        for x, char in enumerate(line.strip()):
-            grid[(x, y)] = char
-        y += 1
+def solve(filename):
+    """Find number of positions that create loops."""
+    # Read and parse input
+    with open(filename) as f:
+        grid = [list(line.strip()) for line in f]
+    
+    # Find start position
+    start_pos = find_start(grid)
+    if not start_pos:
+        return 0
+    
+    # Try each empty position as an obstacle
+    loop_count = 0
+    for y in range(len(grid)):
+        for x in range(len(grid[0])):
+            # Only try empty spaces that aren't the start position
+            if grid[y][x] == '.' and (x, y) != start_pos:
+                if simulate_path(grid, start_pos[0], start_pos[1], 0, (x, y)):
+                    loop_count += 1
+    
+    return loop_count
 
-# Find the starting position and direction
-for pos, char in grid.items():
-    if char == '^':
-        start_pos = pos
-        start_dir = 0  # Up
-
-# Part 1: Count the number of visited positions
-visited_positions = simulate_guard_movement(grid, start_pos, start_dir)
-print("Part 1:", len(visited_positions))
-
-# Part 2: Find loop positions
-loop_positions = find_loop_positions(grid, start_pos, start_dir)
-print("Part 2:", len(loop_positions))
+if __name__ == "__main__":
+    result = solve('input.txt')
+    print(f"Number of positions that create loops: {result}")
